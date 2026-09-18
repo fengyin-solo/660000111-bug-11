@@ -14,7 +14,8 @@ const tools: { type: ToolType; label: string; icon: string }[] = [
 ];
 
 export const Toolbar: React.FC = () => {
-  const { activeTool, setActiveTool, strokeColor, setStrokeColor, fillColor, setFillColor, strokeWidth, setStrokeWidth } = useWhiteboardStore();
+  const { activeTool, setActiveTool, strokeColor, setStrokeColor, fillColor, setFillColor, strokeWidth, setStrokeWidth, getActiveLayerBlockReason } = useWhiteboardStore();
+  const blockReason = getActiveLayerBlockReason();
 
   return (
     <div style={{
@@ -51,6 +52,11 @@ export const Toolbar: React.FC = () => {
         onChange={e => setStrokeWidth(Number(e.target.value))}
         title={`线宽: ${strokeWidth}`}
         style={{ width: '40px' }} />
+      {blockReason && (
+        <div title={blockReason} style={{ fontSize: '16px', cursor: 'help' }}>
+          🔒
+        </div>
+      )}
     </div>
   );
 };

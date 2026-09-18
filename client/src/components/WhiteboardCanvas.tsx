@@ -12,8 +12,12 @@ export const WhiteboardCanvas: React.FC = () => {
 
   const {
     board, activeTool, strokeColor, fillColor, strokeWidth,
-    canvasTransform, addElement
+    canvasTransform, addElement, eraseElementsAt,
+    getActiveLayerBlockReason, setNotice
   } = useWhiteboardStore();
+
+  // 橡皮半径跟随线宽，保证连续擦除时有稳定的判定范围
+  const eraserRadius = Math.max(10, strokeWidth * 2);
 
   const getCanvasPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -26,19 +30,34 @@ export const WhiteboardCanvas: React.FC = () => {
   }, [canvasTransform]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool === 'select') return;
+    // 锁定或隐藏的层不允许任何绘制/擦除，并说明原因
+    const blockReason = getActiveLayerBlockReason();
+    if (blockReason) {
+      setNotice(blockReason);
+      return;
+    }
     const point = getCanvasPoint(e);
     isDrawingRef.current = true;
     startPosRef.current = point;
     currentPathRef.current = [point.x, point.y];
-  }, [getCanvasPoint]);
+    if (activeTool === 'eraser') {
+      eraseElementsAt(point.x, point.y, eraserRadius);
+    }
+  }, [activeTool, getCanvasPoint, getActiveLayerBlockReason, setNotice, eraseElementsAt, eraserRadius]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const point = getCanvasPoint(e);
     socketService.moveCursor(point.x, point.y);
 
     if (!isDrawingRef.current) return;
+    // 橡皮在拖拽过程中连续擦除
+    if (activeTool === 'eraser') {
+      eraseElementsAt(point.x, point.y, eraserRadius);
+      return;
+    }
     currentPathRef.current.push(point.x, point.y);
-  }, [getCanvasPoint]);
+  }, [activeTool, getCanvasPoint, eraseElementsAt, eraserRadius]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawingRef.current) return;
@@ -47,6 +66,9 @@ export const WhiteboardCanvas: React.FC = () => {
     let element: BoardElement | null = null;
 
     switch (activeTool) {
+      case 'eraser':
+        // 擦除已在按下/拖拽过程中完成，这里收尾即可
+        break;
       case 'pen':
         element = {
           id: uuidv4(), type: 'path', x: 0, y: 0,
@@ -205,13 +227,16 @@ export const WhiteboardCanvas: React.FC = () => {
     return () => canvas.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // 绘制类工具在锁定/隐藏层上显示禁止光标，与锁定规则保持一致
+  const layerBlocked = activeTool !== 'select' && getActiveLayerBlockReason() !== null;
+
   return (
     <canvas
       ref={canvasRef}
       style={{
         width: '100%',
         height: '100%',
-        cursor: activeTool === 'select' ? 'default' : 'crosshair',
+        cursor: activeTool === 'select' ? 'default' : layerBlocked ? 'not-allowed' : 'crosshair',
         backgroundColor: board?.backgroundColor || '#f5f5f5'
       }}
       onMouseDown={handleMouseDown}

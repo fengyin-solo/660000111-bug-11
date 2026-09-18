@@ -12,7 +12,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
   const {
-    setBoard, updateCursor, removeCursor, setCursors, username
+    setBoard, updateCursor, removeCursor, setCursors, username, notice
   } = useWhiteboardStore();
 
   useEffect(() => {
@@ -36,11 +36,35 @@ const App: React.FC = () => {
       });
       socketService.onElementAdded((data: { element: BoardElement; layerIndex: number }) => {
         const { board: currentBoard } = useWhiteboardStore.getState();
-        if (currentBoard) {
+        if (currentBoard && currentBoard.layers[data.layerIndex]) {
           const layers = [...currentBoard.layers];
           layers[data.layerIndex] = {
             ...layers[data.layerIndex],
             elements: [...layers[data.layerIndex].elements, data.element]
+          };
+          setBoard({ ...currentBoard, layers });
+        }
+      });
+      socketService.onElementUpdated((data: { elementId: string; updates: Partial<BoardElement>; layerIndex: number }) => {
+        const { board: currentBoard } = useWhiteboardStore.getState();
+        if (currentBoard && currentBoard.layers[data.layerIndex]) {
+          const layers = [...currentBoard.layers];
+          layers[data.layerIndex] = {
+            ...layers[data.layerIndex],
+            elements: layers[data.layerIndex].elements.map(el =>
+              el.id === data.elementId ? { ...el, ...data.updates } : el
+            )
+          };
+          setBoard({ ...currentBoard, layers });
+        }
+      });
+      socketService.onElementDeleted((data: { elementId: string; layerIndex: number }) => {
+        const { board: currentBoard } = useWhiteboardStore.getState();
+        if (currentBoard && currentBoard.layers[data.layerIndex]) {
+          const layers = [...currentBoard.layers];
+          layers[data.layerIndex] = {
+            ...layers[data.layerIndex],
+            elements: layers[data.layerIndex].elements.filter(el => el.id !== data.elementId)
           };
           setBoard({ ...currentBoard, layers });
         }
@@ -127,6 +151,16 @@ const App: React.FC = () => {
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           <WhiteboardCanvas />
           <CursorOverlay />
+          {notice && (
+            <div style={{
+              position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,0.75)', color: '#fff', padding: '8px 16px',
+              borderRadius: '6px', fontSize: '13px', zIndex: 20, pointerEvents: 'none',
+              whiteSpace: 'nowrap'
+            }}>
+              {notice}
+            </div>
+          )}
         </div>
         <LayerPanel />
       </div>
